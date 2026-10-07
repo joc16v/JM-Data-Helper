@@ -1,10 +1,10 @@
-param([string]$Version = '0.2.0')
+param([string]$Version = '0.2.1')
 $ErrorActionPreference = 'Stop'
 $projectRoot = $PSScriptRoot
 $artifactRoot = Join-Path $projectRoot 'artifacts'
 New-Item -ItemType Directory -Force -Path $artifactRoot | Out-Null
 foreach ($variant in @('framework-dependent', 'self-contained')) {
-    $outputPath = Join-Path $artifactRoot $variant
+    $outputPath = Join-Path $artifactRoot "v$Version/$variant"
     $selfContained = if ($variant -eq 'self-contained') { 'true' } else { 'false' }
     & dotnet publish (Join-Path $projectRoot 'JMDataHelper.csproj') -c Release -r win-x64 --self-contained $selfContained '-p:PublishSingleFile=true' '-p:IncludeNativeLibrariesForSelfExtract=true' "-p:EnableCompressionInSingleFile=$selfContained" '-p:DebugType=None' "-p:Version=$Version" -o $outputPath
     if ($LASTEXITCODE -ne 0) { throw "Publish failed: $variant" }

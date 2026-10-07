@@ -7,12 +7,13 @@
     <Nullable>enable</Nullable>
     <AssemblyName>JMDataHelper</AssemblyName>
     <RootNamespace>JMDataHelper</RootNamespace>
-    <Version>0.2.0</Version>
+    <Version>0.2.1</Version>
+    <ApplicationIcon>Assets\JMDataHelper.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="tests\**\*.cs" />
     <Content Remove="tests\**;artifacts\**" />
-    <None Update="config.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <EmbeddedResource Include="Assets\JMDataHelper.ico" LogicalName="JMDataHelper.AppIcon.ico" />
     <Content Update="config.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

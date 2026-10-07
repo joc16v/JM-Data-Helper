@@ -4,6 +4,7 @@ using JMDataHelper.Services;
 using JMDataHelper.Sources;
 using JMDataHelper.Sources.Dhmz;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
 
 var html = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "dhmz-pointers.html"));
 var parsed = DhmzParser.Parse(1, "https://meteo.hr/", html);
@@ -77,6 +78,28 @@ var uiThread = new Thread(() =>
 uiThread.SetApartmentState(ApartmentState.STA);
 uiThread.Start(); uiThread.Join();
 if (uiFailure is not null) throw uiFailure;
+Check(AppIcon.Value.Width == 32 && AppIcon.Value.Handle != IntPtr.Zero, "embedded application icon loads");
+var logDir = Path.Combine(AppContext.BaseDirectory, "log-test-" + Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(logDir);
+var logClock = new Clock(DateTimeOffset.Parse("2026-10-07T12:00:00Z"));
+var oldLog = Path.Combine(logDir, "helper-2026-09-23.log");
+var retainedLog = Path.Combine(logDir, "helper-2026-09-24.log");
+File.WriteAllText(oldLog, "old"); File.WriteAllText(retainedLog, "retained");
+using (var logs = new FileLogProvider(logDir, logClock))
+{
+    Check(!File.Exists(oldLog) && File.Exists(retainedLog), "logs retain exactly 14 calendar days");
+    var logger = logs.CreateLogger("JMDataHelper.Tests");
+    var largeMessage = new string('x', 10000);
+    for (var i = 0; i < 700; i++) logger.LogInformation("{Message}", largeMessage);
+    var todaysLogs = Directory.GetFiles(logDir, "helper-2026-10-07*.log");
+    Check(todaysLogs.Length == 2 && todaysLogs.All(x => new FileInfo(x).Length <= FileLogProvider.MaxFileBytes), "rotation keeps two files within 2 MB each");
+    Check(File.ReadAllText(todaysLogs[0]).Contains("[skraćeno]"), "oversized log entries are bounded");
+    logClock.Now = logClock.Now.AddDays(14);
+    logger.LogInformation("next day");
+    Check(Directory.GetFiles(logDir).Length == 1, "old logs deleted while helper remains running");
+}
+foreach (var file in Directory.GetFiles(logDir)) File.Delete(file);
+Directory.Delete(logDir);
 Console.WriteLine("PASS: parser, levels, incomplete/unknown data rejection, cache, midnight, refresh coalescing, source status, cancellation and recovery.");
 
 static void Check(bool value, string name) { if (!value) throw new Exception("FAILED: " + name); Console.WriteLine("OK: " + name); }

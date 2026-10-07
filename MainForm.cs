@@ -21,6 +21,7 @@ public sealed class MainForm : Form
     {
         _dhmz = dhmz; _sources = sources;
         Text = $"JM Data Helper {Program.Version}";
+        Icon = AppIcon.Value;
         ClientSize = new Size(620, 335); FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false; StartPosition = FormStartPosition.CenterScreen;
         var title = new Label { Text = "JM Data Helper", AutoSize = true, Font = new Font(Font.FontFamily, 18, FontStyle.Bold), Location = new(20, 18) };
@@ -41,7 +42,7 @@ public sealed class MainForm : Form
         _menu.Items.Add("Otvori logove", null, (_, _) => Open(logFolder));
         _menu.Items.Add(new ToolStripSeparator());
         _menu.Items.Add("Izlaz", null, (_, _) => { _exit = true; Close(); });
-        _tray = new NotifyIcon { Icon = SystemIcons.Application, Text = "JM Data Helper · API radi", ContextMenuStrip = _menu, Visible = true };
+        _tray = new NotifyIcon { Icon = AppIcon.Value, Text = "JM Data Helper · API radi", ContextMenuStrip = _menu, Visible = true };
         _tray.DoubleClick += (_, _) => Restore();
         _sources.Changed += SourceChanged;
         FormClosing += OnClosing;

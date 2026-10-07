@@ -1,4 +1,4 @@
-JM DATA HELPER 0.2 – WINDOWS x64
+JM DATA HELPER 0.2.1 – WINDOWS x64
 
 KOJU VARIJANTU ODABRATI?
 framework-dependent: mali paket; treba instalirani .NET 10 Desktop Runtime x64
@@ -7,7 +7,7 @@ self-contained: uključuje potrebne runtimeove; dodatna .NET instalacija nije po
 Obje varijante imaju istu funkcionalnost. Nemoj pokretati obje istovremeno.
 
 POKRETANJE
-1. Ugasi staru v0.1 prije zamjene (inače koristi isti port 8765).
+1. Ugasi staru verziju prije zamjene (inače koristi isti port 8765).
 2. Raspakiraj cijeli ZIP u jedan folder (EXE i config.json zajedno).
 3. Pokreni JMDataHelper.exe.
 4. Otvori Pilot Edge i klikni UČITAJ DHMZ u Meteoalarm templateu.
@@ -34,6 +34,9 @@ API: http://127.0.0.1:8765/api/health
 Izvori/status: http://127.0.0.1:8765/api/sources
 Prozor prikazuje i pozive iz Pilota, zadnji uspješan dohvat i zadnju grešku.
 Logovi: %LOCALAPPDATA%\JMDataHelper\logs (gumb Otvori logove).
+Čuvaju se zadnjih 14 kalendarskih dana; najviše 2 datoteke po danu do 2 MB.
+Ukupni maksimum 56 MB; u normalnom radu bitno manje.
+Čišćenje radi pri pokretanju i prvom zapisu svakog novog dana, bez restarta.
 API radi ne znači da je internet ili DHMZ trenutno dostupan.
 Po potrebi browser traži dopuštenje za pristup lokalnoj mreži.
 

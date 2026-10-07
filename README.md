@@ -1,4 +1,4 @@
-# JM Data Helper v0.2
+# JM Data Helper v0.2.1
 
 Lokalni Windows helper za Viz Pilot Edge. Template može ostati na centralnom PDS-u, ali helper mora raditi na računalu na kojem je otvoren browser s Pilot Edgeom. Sama zajednička uredska mreža nije dovoljna: `127.0.0.1` uvijek znači to računalo.
 
@@ -19,7 +19,8 @@ Pilot Edge mora ostati upotrebljiv ručno kada helper nije pokrenut ili izvor ni
 
 - .NET 10, tray i jedna instanca po Windows korisniku.
 - Status izvora i zadnje uspješno dohvaćanje ažuriraju se i pri zahtjevima iz Pilota.
-- Dnevni logovi u `%LOCALAPPDATA%\JMDataHelper\logs`, najviše 14 dana i rotacija na 2 MB.
+- Vlastita JM ikona sa zupčanikom u EXE-u, prozoru i trayu.
+- Dnevni logovi u `%LOCALAPPDATA%\JMDataHelper\logs`: zadnjih 14 kalendarskih dana, do dvije datoteke po danu, svaka najviše 2 MB (ukupno do 56 MB). Čišćenje pri pokretanju i prvom zapisu svakog novog dana. Preveliki pojedinačni zapisi skraćuju se.
 - Podesivi port, dopušteni browser origin, timeout i cache.
 - Odvojeni DHMZ parser i servis, zajednički registar statusa za buduće izvore.
 - Provjere svih 21 županije i 6 morskih područja; nepotpun odgovor je greška, nikada automatski zeleno.
