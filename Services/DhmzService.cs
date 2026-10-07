@@ -1,170 +1,66 @@
-using System.Net;
-using System.Text.RegularExpressions;
+using JMDataHelper.Infrastructure;
 using JMDataHelper.Models;
-
+using JMDataHelper.Sources;
+using JMDataHelper.Sources.Dhmz;
+using Microsoft.Extensions.Logging;
 namespace JMDataHelper.Services;
 
-public sealed class DhmzService
+public sealed class DhmzService : IDisposable
 {
-    private static readonly Regex MapRegionRegex = new(
-        "<(?:g|a)\\b(?=[^>]*\\bid=\\\"(?<id>[^\\\"]+_pointer)\\\")(?=[^>]*\\bclass=\\\"[^\\\"]*fd-c-map__regija--(?<color>green|yellow|orange|red)[^\\\"]*\\\")[^>]*>",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
-    private static readonly IReadOnlyDictionary<string, string> CountyNames =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["grad_zagreb"] = "Grad Zagreb",
-            ["zagrebacka_zupanija"] = "Zagrebačka županija",
-            ["krapinsko-zagorska_zupanija"] = "Krapinsko-zagorska županija",
-            ["varazdinska_zupanija"] = "Varaždinska županija",
-            ["koprivnicko-krizevacka_zupanija"] = "Koprivničko-križevačka županija",
-            ["medimurska_zupanija"] = "Međimurska županija",
-            ["bjelovarsko-bilogorska_zupanija"] = "Bjelovarsko-bilogorska županija",
-            ["viroviticko-podravska_zupanija"] = "Virovitičko-podravska županija",
-            ["pozesko-slavonska_zupanija"] = "Požeško-slavonska županija",
-            ["brodsko-posavska_zupanija"] = "Brodsko-posavska županija",
-            ["osjecko-baranjska_zupanija"] = "Osječko-baranjska županija",
-            ["vukovarsko-srijemska_zupanija"] = "Vukovarsko-srijemska županija",
-            ["sisacko-moslavacka_zupanija"] = "Sisačko-moslavačka županija",
-            ["karlovacka_zupanija"] = "Karlovačka županija",
-            ["primorsko-goranska_zupanija"] = "Primorsko-goranska županija",
-            ["istarska_zupanija"] = "Istarska županija",
-            ["licko-senjska_zupanija"] = "Ličko-senjska županija",
-            ["zadarska_zupanija"] = "Zadarska županija",
-            ["sibensko-kninska_zupanija"] = "Šibensko-kninska županija",
-            ["splitsko-dalmatinska_zupanija"] = "Splitsko-dalmatinska županija",
-            ["dubrovacko-neretvanska_zupanija"] = "Dubrovačko-neretvanska županija"
-        };
-
-    private static readonly IReadOnlyDictionary<string, string> SeaNames =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["zapadna_obala_istre"] = "Zapadna obala Istre",
-            ["kvarner_i_kvarneric"] = "Kvarner i Kvarnerić",
-            ["velebitski_kanal"] = "Velebitski kanal",
-            ["sjeverna_dalmacija"] = "Sjeverna Dalmacija",
-            ["srednja_dalmacija"] = "Srednja Dalmacija",
-            ["juzna_dalmacija"] = "Južna Dalmacija"
-        };
-
-    private readonly HttpClient _httpClient;
-    private readonly object _cacheLock = new();
-    private readonly Dictionary<int, CacheEntry> _cache = new();
-
-    public DhmzService()
+    public const string SourceId = "dhmz-meteoalarm";
+    private readonly HttpClient _client;
+    private readonly HelperSettings _settings;
+    private readonly SourceRegistry _status;
+    private readonly ILogger<DhmzService> _logger;
+    private readonly TimeProvider _clock;
+    private readonly SemaphoreSlim[] _gates = [new(1), new(1), new(1)];
+    private readonly CacheEntry?[] _cache = new CacheEntry?[3];
+    private static readonly TimeZoneInfo Zagreb = TimeZoneInfo.FindSystemTimeZoneById("Central European Standard Time");
+    public DhmzService(HttpClient client, HelperSettings settings, SourceRegistry status, ILogger<DhmzService> logger, TimeProvider? clock = null)
     {
-        var handler = new HttpClientHandler
-        {
-            AutomaticDecompression = DecompressionMethods.All
-        };
-
-        _httpClient = new HttpClient(handler)
-        {
-            Timeout = TimeSpan.FromSeconds(15)
-        };
-        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("JMDataHelper/0.1 (+local broadcast helper)");
-        _httpClient.DefaultRequestHeaders.AcceptLanguage.ParseAdd("hr-HR,hr;q=0.9,en;q=0.7");
+        _client = client; _settings = settings; _status = status; _logger = logger;
+        _clock = clock ?? TimeProvider.System;
+        _status.Register(SourceId, "DHMZ · Meteoalarm");
     }
-
-    public async Task<DhmzWarningsResponse> GetWarningsAsync(
-        int day,
-        bool forceRefresh = false,
-        CancellationToken cancellationToken = default)
+    public async Task<DhmzWarningsResponse> GetWarningsAsync(int day, bool forceRefresh = false, CancellationToken cancellationToken = default)
     {
-        if (day is < 0 or > 2)
-            throw new ArgumentOutOfRangeException(nameof(day));
-
-        if (!forceRefresh)
+        if (day is < 0 or > 2) throw new ArgumentOutOfRangeException(nameof(day));
+        var requestedAt = _clock.GetUtcNow();
+        await _gates[day].WaitAsync(cancellationToken);
+        try
         {
-            lock (_cacheLock)
+            var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(_clock.GetUtcNow(), Zagreb).DateTime);
+            var cached = _cache[day];
+            if (cached is not null && cached.LocalDate == today && _clock.GetUtcNow() - cached.StoredAt < TimeSpan.FromSeconds(_settings.CacheSeconds)
+                && (!forceRefresh || cached.StoredAt >= requestedAt))
             {
-                if (_cache.TryGetValue(day, out var cached) &&
-                    DateTimeOffset.UtcNow - cached.StoredAt < TimeSpan.FromSeconds(45))
-                {
-                    return cached.Response;
-                }
+                _status.Success(SourceId, cached.Response.FetchedAt, true);
+                _logger.LogInformation("DHMZ day={Day}: cache, fetched={FetchedAt}", day, cached.Response.FetchedAt);
+                return cached.Response;
             }
+            _status.Started(SourceId);
+            var url = $"https://meteo.hr/naslovnica-upozorenja-zupanije.php?tab=upozorenja&dan={day}";
+            using var response = await _client.GetAsync(url, cancellationToken);
+            response.EnsureSuccessStatusCode();
+            var html = await response.Content.ReadAsStringAsync(cancellationToken);
+            var parsed = DhmzParser.Parse(day, url, html, _clock.GetUtcNow());
+            _cache[day] = new(_clock.GetUtcNow(), today, parsed);
+            _status.Success(SourceId, parsed.FetchedAt, false);
+            _logger.LogInformation("DHMZ day={Day}: OK, counties={Counties}, sea={Sea}", day, parsed.Counties.Count, parsed.Sea.Count);
+            return parsed;
         }
-
-        var url = $"https://meteo.hr/naslovnica-upozorenja-zupanije.php?tab=upozorenja&dan={day}";
-        using var response = await _httpClient.GetAsync(url, cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        var html = await response.Content.ReadAsStringAsync(cancellationToken);
-        var parsed = Parse(day, url, html);
-
-        lock (_cacheLock)
+        catch (OperationCanceledException ex)
         {
-            _cache[day] = new CacheEntry(DateTimeOffset.UtcNow, parsed);
+            var message = cancellationToken.IsCancellationRequested ? "Dohvat je otkazan." : "DHMZ nije odgovorio unutar zadanog vremena.";
+            _status.Failed(SourceId, message); _logger.LogWarning(ex, "DHMZ day={Day}: {Message}", day, message);
+            throw new OperationCanceledException(message, ex, cancellationToken);
         }
-
-        return parsed;
+        catch (Exception ex)
+        {
+            _status.Failed(SourceId, ex.Message); _logger.LogError(ex, "DHMZ day={Day}: failed", day); throw;
+        }
+        finally { _gates[day].Release(); }
     }
-
-    internal static DhmzWarningsResponse Parse(int day, string sourceUrl, string html)
-    {
-        var colorsById = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (Match match in MapRegionRegex.Matches(html))
-        {
-            var pointerId = match.Groups["id"].Value;
-            var color = match.Groups["color"].Value.ToLowerInvariant();
-            if (string.IsNullOrWhiteSpace(pointerId) || string.IsNullOrWhiteSpace(color))
-                continue;
-
-            var id = pointerId.EndsWith("_pointer", StringComparison.OrdinalIgnoreCase)
-                ? pointerId[..^"_pointer".Length]
-                : pointerId;
-
-            colorsById[id] = color;
-        }
-
-        var missingCounties = CountyNames.Keys.Where(id => !colorsById.ContainsKey(id)).ToArray();
-        if (missingCounties.Length > 0)
-        {
-            throw new InvalidDataException(
-                "DHMZ HTML se promijenio ili nije potpun. Nedostaju županije: " +
-                string.Join(", ", missingCounties));
-        }
-
-        var missingSea = SeaNames.Keys.Where(id => !colorsById.ContainsKey(id)).ToArray();
-        if (missingSea.Length > 0)
-        {
-            throw new InvalidDataException(
-                "DHMZ HTML se promijenio ili nije potpun. Nedostaju morska područja: " +
-                string.Join(", ", missingSea));
-        }
-
-        var counties = CountyNames
-            .Select(pair => ToRegion(pair.Key, pair.Value, colorsById[pair.Key]))
-            .ToArray();
-
-        var sea = SeaNames
-            .Select(pair => ToRegion(pair.Key, pair.Value, colorsById[pair.Key]))
-            .ToArray();
-
-        return new DhmzWarningsResponse(
-            Ok: true,
-            Day: day,
-            SourceUrl: sourceUrl,
-            FetchedAt: DateTimeOffset.Now,
-            Counties: counties,
-            Sea: sea);
-    }
-
-    private static WarningRegion ToRegion(string id, string name, string color) =>
-        new(id, name, color, ColorToLevel(color));
-
-    // Pilot/Viz convention for this project:
-    // 0 = no color/manual, 1 = green, 2 = yellow, 3 = orange, 4 = red.
-    private static int ColorToLevel(string color) => color.ToLowerInvariant() switch
-    {
-        "green" => 1,
-        "yellow" => 2,
-        "orange" => 3,
-        "red" => 4,
-        _ => 0
-    };
-
-    private sealed record CacheEntry(DateTimeOffset StoredAt, DhmzWarningsResponse Response);
+    public void Dispose() { foreach (var gate in _gates) gate.Dispose(); }
+    private sealed record CacheEntry(DateTimeOffset StoredAt, DateOnly LocalDate, DhmzWarningsResponse Response);
 }

@@ -1,0 +1,6 @@
+{
+  "port": 8765,
+  "allowedOrigins": ["http://viz-plt-mos-gwy:8177"],
+  "requestTimeoutSeconds": 15,
+  "cacheSeconds": 45
+}
