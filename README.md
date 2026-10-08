@@ -23,7 +23,7 @@ Pilot Edge mora ostati upotrebljiv ručno kada helper nije pokrenut ili izvor ni
 - Dnevni logovi u `%LOCALAPPDATA%\JMDataHelper\logs`: zadnjih 14 kalendarskih dana, do dvije datoteke po danu, svaka najviše 2 MB (ukupno do 56 MB). Čišćenje pri pokretanju i prvom zapisu svakog novog dana. Preveliki pojedinačni zapisi skraćuju se.
 - Podesivi port, dopušteni browser origin, timeout i cache.
 - Odvojeni DHMZ parser i servis, zajednički registar statusa za buduće izvore.
-- Provjere svih 21 županije i 6 morskih područja; nepotpun odgovor je greška, nikada automatski zeleno.
+- Stroga provjera svih 21 županije; nedostajuća županija je greška. Odgovor uvijek sadrži i svih 6 poznatih morskih područja.
 - Cache po danu ne vrijedi nakon promjene datuma u Zagrebu; istodobni zahtjevi dijele dohvat.
 - Automatske provjere i izrada obaju paketa u GitHub Actions.
 
@@ -51,7 +51,9 @@ CORS i Private Network Access preflight dopušteni su samo navedenim originima. 
 - `GET /api/dhmz/warnings?day=0|1|2`: danas, sutra, prekosutra.
 - Dodaj `&refresh=true` za ponovno dohvaćanje.
 
-Warning odgovor ostaje kompatibilan: `ok`, `day`, `sourceUrl`, `fetchedAt`, `counties`, `sea`. Svaka regija ima `id`, `name`, `color`, `level`. `fetchedAt` je vrijeme uspješnog dohvaćanja, a ne objave DHMZ-a. Leveli: **1 green, 2 yellow, 3 orange, 4 red**. Nula je rezervirana za ručni Viz workflow.
+Warning odgovor ostaje kompatibilan: `ok`, `day`, `sourceUrl`, `fetchedAt`, `counties`, `sea`. Svaka regija ima `id`, `name`, `color`, `level`. `fetchedAt` je vrijeme uspješnog dohvaćanja, a ne objave DHMZ-a. Leveli: **0 none, 1 green, 2 yellow, 3 orange, 4 red**.
+
+DHMZ može izostaviti morska područja bez upozorenja: svako od poznatih 6 područja bez pointera vraća se kao `color: "none", level: 0`. Pronađene boje ostaju nepromijenjene. Ovo pravilo vrijedi samo za more: svih 21 županija i dalje mora biti prisutno s valjanom bojom, a prisutno morsko područje s neprepoznatom bojom i dalje je greška.
 
 Nevaljan dan daje HTTP 400. Nedostupan izvor ili promijenjena/nepotpuna HTML struktura daje HTTP 502 s `ok:false` i `error`. Ne vraćaju se stari podaci kao da su novi. Status pamti zadnji uspjeh, a template treba sačuvati postojeće/ručne vrijednosti kad dohvat ne uspije.
 

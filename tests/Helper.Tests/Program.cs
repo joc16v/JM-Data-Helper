@@ -17,7 +17,23 @@ Check(parsed.Counties.All(x => x.Level is >=1 and <=4), "only valid levels");
 var red = html.Replace("fd-c-map__regija--green", "fd-c-map__regija--red");
 Check(DhmzParser.Parse(0, "source", red).Counties.Single(x => x.Id == "grad_zagreb").Level == 4, "red=4");
 Throws(() => DhmzParser.Parse(0, "source", html.Replace("grad_zagreb_pointer", "missing_pointer")), "missing county rejects entire result");
-Throws(() => DhmzParser.Parse(0, "source", html.Replace("zapadna_obala_istre_pointer", "missing_sea_pointer")), "missing sea rejects entire result");
+var missingSeaHtml = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "dhmz-missing-two-sea.html"));
+var missingSea = DhmzParser.Parse(2, "source", missingSeaHtml);
+Check(missingSea.Ok && missingSea.Counties.Count == 21 && missingSea.Sea.Count == 6, "missing two sea areas still returns OK, 21 counties and 6 sea areas");
+Check(missingSea.Sea.Select(x => x.Id).Distinct().Count() == 6, "sea IDs remain unique");
+foreach (var id in new[] { "zapadna_obala_istre", "kvarner_i_kvarneric" })
+{
+    var region = missingSea.Sea.Single(x => x.Id == id);
+    Check(region.Color == "none" && region.Level == 0, id + " absent = none/0");
+}
+foreach (var (id, color, level) in new[] { ("velebitski_kanal", "green", 1), ("sjeverna_dalmacija", "yellow", 2), ("srednja_dalmacija", "orange", 3), ("juzna_dalmacija", "red", 4) })
+{
+    var region = missingSea.Sea.Single(x => x.Id == id);
+    Check(region.Color == color && region.Level == level, id + " existing warning preserved");
+}
+Check(missingSea.Counties.SequenceEqual(parsed.Counties), "sea defaults do not change counties");
+Throws(() => DhmzParser.Parse(2, "source", missingSeaHtml.Replace("grad_zagreb_pointer", "missing_pointer")), "missing county still rejected with absent sea areas");
+Throws(() => DhmzParser.Parse(2, "source", missingSeaHtml.Replace("fd-c-map__regija--red", "fd-c-map__regija--grey")), "present sea with unknown color still rejected");
 Throws(() => DhmzParser.Parse(0, "source", "<html>server unavailable</html>"), "invalid HTML cannot become green");
 Throws(() => DhmzParser.Parse(0, "source", html.Replace("fd-c-map__regija--green", "fd-c-map__regija--grey")), "unknown color cannot become green");
 Check(DhmzParser.Parse(2, "source", html.Replace(" id=", "\n id=")).Counties.Count == 21, "attribute whitespace");

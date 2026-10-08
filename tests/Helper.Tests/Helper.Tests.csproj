@@ -8,6 +8,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../JMDataHelper.csproj" />
-    <None Include="Fixtures/dhmz-pointers.html" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures/*.html" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

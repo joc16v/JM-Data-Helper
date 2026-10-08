@@ -9,6 +9,10 @@ public static class DhmzParser
         "<(?:g|a)\\b(?=[^>]*\\bid=\\\"(?<id>[^\\\"]+_pointer)\\\")(?=[^>]*\\bclass=\\\"[^\\\"]*fd-c-map__regija--(?<color>green|yellow|orange|red)[^\\\"]*\\\")[^>]*>",
         RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(2));
 
+    private static readonly Regex RegionPointerRegex = new(
+        "<(?:g|a)\\b[^>]*\\bid=\"(?<id>[^\"]+_pointer)\"[^>]*>",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(2));
+
     private static readonly IReadOnlyDictionary<string, string> CountyNames =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -72,12 +76,16 @@ public static class DhmzParser
                 string.Join(", ", missingCounties));
         }
 
-        var missingSea = SeaNames.Keys.Where(id => !colorsById.ContainsKey(id)).ToArray();
-        if (missingSea.Length > 0)
+        // Only absent sea pointers mean none. Present pointers still need a valid color.
+        var presentPointers = RegionPointerRegex.Matches(html)
+            .Select(match => match.Groups["id"].Value[..^"_pointer".Length])
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var invalidSea = SeaNames.Keys.Where(id => presentPointers.Contains(id) && !colorsById.ContainsKey(id)).ToArray();
+        if (invalidSea.Length > 0)
         {
             throw new InvalidDataException(
-                "DHMZ HTML se promijenio ili nije potpun. Nedostaju morska područja: " +
-                string.Join(", ", missingSea));
+                "DHMZ HTML se promijenio ili nije potpun. Neispravna boja morskih područja: " +
+                string.Join(", ", invalidSea));
         }
 
         var counties = CountyNames
@@ -85,7 +93,7 @@ public static class DhmzParser
             .ToArray();
 
         var sea = SeaNames
-            .Select(pair => ToRegion(pair.Key, pair.Value, colorsById[pair.Key]))
+            .Select(pair => ToRegion(pair.Key, pair.Value, colorsById.GetValueOrDefault(pair.Key, "none")))
             .ToArray();
 
         return new DhmzWarningsResponse(
