@@ -14,6 +14,7 @@ public sealed class MainForm : Form
     private readonly Label _lastSuccess;
     private readonly Label _error;
     private readonly Button _test;
+    private readonly ComboBox _day;
     private readonly CancellationTokenSource _closing = new();
     private bool _exit;
     private bool _resourcesDisposed;
@@ -22,21 +23,27 @@ public sealed class MainForm : Form
         _dhmz = dhmz; _sources = sources;
         Text = $"JM Data Helper {Program.Version}";
         Icon = AppIcon.Value;
-        ClientSize = new Size(620, 335); FormBorderStyle = FormBorderStyle.FixedDialog;
+        ClientSize = new Size(620, 380); FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false; StartPosition = FormStartPosition.CenterScreen;
         var title = new Label { Text = "JM Data Helper", AutoSize = true, Font = new Font(Font.FontFamily, 18, FontStyle.Bold), Location = new(20, 18) };
         var api = new Label { Text = $"API radi · {settings.ListenUrl}", AutoSize = true, ForeColor = Color.DarkGreen, Location = new(22, 62) };
         _sourceStatus = new Label { Text = "DHMZ: još nema dohvaćanja", AutoSize = true, Location = new(22, 94) };
         _lastSuccess = new Label { Text = "Zadnji uspješan dohvat: —", AutoSize = true, Location = new(22, 120) };
         _error = new Label { AutoSize = false, Size = new(575, 55), Location = new(22, 145), ForeColor = Color.Firebrick, AutoEllipsis = true };
-        _test = new Button { Text = "Test DHMZ (sutra)", Size = new(170, 35), Location = new(22, 208) };
+        _test = new Button { Text = "Test DHMZ", Size = new(170, 35), Location = new(22, 208) };
         _test.Click += async (_, _) => await TestAsync();
         var logs = new Button { Text = "Otvori logove", Size = new(150, 35), Location = new(206, 208) };
         logs.Click += (_, _) => Open(logFolder);
         var health = new Button { Text = "Provjeri API", Size = new(150, 35), Location = new(370, 208) };
         health.Click += (_, _) => Open(settings.ListenUrl + "/api/health");
-        var note = new Label { Text = "Zatvaranje prozora ostavlja helper pokrenut u trayu.\nZa prekid odaberi Izlaz na tray ikoni.", AutoSize = true, ForeColor = SystemColors.GrayText, Location = new(22, 266) };
-        Controls.AddRange([title, api, _sourceStatus, _lastSuccess, _error, _test, logs, health, note]);
+        var dayLabel = new Label { Text = "Dan:", AutoSize = true, Location = new(22, 267) };
+        _day = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Size = new(120, 30), Location = new(70, 260) };
+        _day.Items.AddRange(["Danas", "Sutra", "Prekosutra"]);
+        _day.SelectedIndex = 1;
+        var json = new Button { Text = "Otvori DHMZ JSON", Size = new(180, 35), Location = new(206, 255) };
+        json.Click += (_, _) => Open(settings.ListenUrl + $"/api/dhmz/warnings?day={_day.SelectedIndex}&refresh=true");
+        var note = new Label { Text = "Zatvaranje prozora ostavlja helper pokrenut u trayu.\nZa prekid odaberi Izlaz na tray ikoni.", AutoSize = true, ForeColor = SystemColors.GrayText, Location = new(22, 316) };
+        Controls.AddRange([title, api, _sourceStatus, _lastSuccess, _error, _test, logs, health, dayLabel, _day, json, note]);
         _menu = new ContextMenuStrip();
         _menu.Items.Add("Otvori JM Data Helper", null, (_, _) => Restore());
         _menu.Items.Add("Otvori logove", null, (_, _) => Open(logFolder));
@@ -73,7 +80,7 @@ public sealed class MainForm : Form
     private async Task TestAsync()
     {
         _test.Enabled = false;
-        try { await _dhmz.GetWarningsAsync(1, true, _closing.Token); }
+        try { await _dhmz.GetWarningsAsync(_day.SelectedIndex, true, _closing.Token); }
         catch (Exception) { /* Source status and logs contain the failure. */ }
         finally { if (!IsDisposed && !_closing.IsCancellationRequested) UpdateStatus(); }
     }

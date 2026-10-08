@@ -34,6 +34,17 @@ foreach (var (id, color, level) in new[] { ("velebitski_kanal", "green", 1), ("s
 Check(missingSea.Counties.SequenceEqual(parsed.Counties), "sea defaults do not change counties");
 Throws(() => DhmzParser.Parse(2, "source", missingSeaHtml.Replace("grad_zagreb_pointer", "missing_pointer")), "missing county still rejected with absent sea areas");
 Throws(() => DhmzParser.Parse(2, "source", missingSeaHtml.Replace("fd-c-map__regija--red", "fd-c-map__regija--grey")), "present sea with unknown color still rejected");
+var uncoloredSeaHtml = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "dhmz-uncolored-two-sea.html"));
+var uncoloredSea = DhmzParser.Parse(2, "source", uncoloredSeaHtml);
+Check(uncoloredSea.Ok && uncoloredSea.Counties.Count == 21 && uncoloredSea.Sea.Count == 6, "base-only sea pointers still return OK and all 27 areas");
+Check(uncoloredSea.Sea.SequenceEqual(missingSea.Sea), "DHMZ base-only sea pointers equal absent sea pointers (none/0), other colors preserved");
+Throws(() => DhmzParser.Parse(2, "source", uncoloredSeaHtml.Replace("fd-c-map__regija--green", "")), "uncolored county still rejected");
+if (args.Length == 2 && args[0] == "--dhmz-html")
+{
+    var live = DhmzParser.Parse(2, "https://meteo.hr/", File.ReadAllText(args[1]));
+    Check(live.Ok && live.Counties.Count == 21 && live.Sea.Count == 6, "captured live DHMZ day=2 parses successfully");
+    foreach (var region in live.Sea) Console.WriteLine($"LIVE SEA: {region.Id} = {region.Color}/{region.Level}");
+}
 Throws(() => DhmzParser.Parse(0, "source", "<html>server unavailable</html>"), "invalid HTML cannot become green");
 Throws(() => DhmzParser.Parse(0, "source", html.Replace("fd-c-map__regija--green", "fd-c-map__regija--grey")), "unknown color cannot become green");
 Check(DhmzParser.Parse(2, "source", html.Replace(" id=", "\n id=")).Counties.Count == 21, "attribute whitespace");
@@ -72,10 +83,11 @@ var uiThread = new Thread(() =>
 {
     try
     {
-        using var first = new SingleInstance();
+        var testInstanceName = "JMDataHelper.Tests-" + Guid.NewGuid().ToString("N");
+        using var first = new SingleInstance(testInstanceName);
         using var activated = new AutoResetEvent(false);
         first.Listen(() => activated.Set());
-        using (var second = new SingleInstance())
+        using (var second = new SingleInstance(testInstanceName))
             Check(first.IsFirst && !second.IsFirst && activated.WaitOne(2000), "single instance activates existing process");
         using var form = new JMDataHelper.MainForm(service, sources, new HelperSettings(), Path.GetTempPath());
         var closing = new FormClosingEventArgs(CloseReason.UserClosing, false);

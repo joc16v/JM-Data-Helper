@@ -9,12 +9,12 @@ public sealed class SingleInstance : IDisposable
     private readonly CancellationTokenSource _stop = new();
     private Task? _listener;
     public bool IsFirst { get; }
-    public SingleInstance()
+    public SingleInstance(string instanceName = "JMDataHelper")
     {
         var user = WindowsIdentity.GetCurrent().User?.Value ?? Environment.UserName;
-        _mutex = new Mutex(true, $"Local\\JMDataHelper-{user}", out var created);
+        _mutex = new Mutex(true, $"Local\\{instanceName}-{user}", out var created);
         IsFirst = created;
-        _activate = new EventWaitHandle(false, EventResetMode.AutoReset, $"Local\\JMDataHelper-activate-{user}");
+        _activate = new EventWaitHandle(false, EventResetMode.AutoReset, $"Local\\{instanceName}-activate-{user}");
         if (!IsFirst) _activate.Set();
     }
     public void Listen(Action activate)

@@ -1,4 +1,4 @@
-# JM Data Helper v0.2.1
+# JM Data Helper v0.2.2
 
 Lokalni Windows helper za Viz Pilot Edge. Template može ostati na centralnom PDS-u, ali helper mora raditi na računalu na kojem je otvoren browser s Pilot Edgeom. Sama zajednička uredska mreža nije dovoljna: `127.0.0.1` uvijek znači to računalo.
 
@@ -53,7 +53,9 @@ CORS i Private Network Access preflight dopušteni su samo navedenim originima. 
 
 Warning odgovor ostaje kompatibilan: `ok`, `day`, `sourceUrl`, `fetchedAt`, `counties`, `sea`. Svaka regija ima `id`, `name`, `color`, `level`. `fetchedAt` je vrijeme uspješnog dohvaćanja, a ne objave DHMZ-a. Leveli: **0 none, 1 green, 2 yellow, 3 orange, 4 red**.
 
-DHMZ može izostaviti morska područja bez upozorenja: svako od poznatih 6 područja bez pointera vraća se kao `color: "none", level: 0`. Pronađene boje ostaju nepromijenjene. Ovo pravilo vrijedi samo za more: svih 21 županija i dalje mora biti prisutno s valjanom bojom, a prisutno morsko područje s neprepoznatom bojom i dalje je greška.
+DHMZ može izostaviti morska područja bez upozorenja ili poslati njihov pointer samo s osnovnom klasom `fd-c-map__regija-v2`, bez klase boje. U oba slučaja poznato morsko područje vraća se kao `color: "none", level: 0`. Pronađene boje ostaju nepromijenjene. Ovo pravilo vrijedi samo za more: svih 21 županija i dalje mora biti prisutno s valjanom bojom, a eksplicitna neprepoznata klasa boje mora i dalje je greška.
+
+Gumb **Otvori DHMZ JSON** otvara warning endpoint za odabrani dan (Danas/Sutra/Prekosutra) uz osvježavanje podataka. Isti odabir dana koristi i **Test DHMZ**. **Provjeri API** zasebno otvara `/api/health`.
 
 Nevaljan dan daje HTTP 400. Nedostupan izvor ili promijenjena/nepotpuna HTML struktura daje HTTP 502 s `ok:false` i `error`. Ne vraćaju se stari podaci kao da su novi. Status pamti zadnji uspjeh, a template treba sačuvati postojeće/ručne vrijednosti kad dohvat ne uspije.
 

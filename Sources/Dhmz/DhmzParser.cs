@@ -13,6 +13,10 @@ public static class DhmzParser
         "<(?:g|a)\\b[^>]*\\bid=\"(?<id>[^\"]+_pointer)\"[^>]*>",
         RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(2));
 
+    private static readonly Regex AnyColorClassRegex = new(
+        "\\bclass=\"[^\"]*\\bfd-c-map__regija--[^\"\\s]+",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(2));
+
     private static readonly IReadOnlyDictionary<string, string> CountyNames =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -76,11 +80,13 @@ public static class DhmzParser
                 string.Join(", ", missingCounties));
         }
 
-        // Only absent sea pointers mean none. Present pointers still need a valid color.
-        var presentPointers = RegionPointerRegex.Matches(html)
+        // DHMZ also emits sea pointers with only the base class when there is no warning.
+        // An explicit but unrecognized color class is still a structural error.
+        var invalidSea = RegionPointerRegex.Matches(html)
+            .Where(match => AnyColorClassRegex.IsMatch(match.Value))
             .Select(match => match.Groups["id"].Value[..^"_pointer".Length])
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var invalidSea = SeaNames.Keys.Where(id => presentPointers.Contains(id) && !colorsById.ContainsKey(id)).ToArray();
+            .Where(id => SeaNames.ContainsKey(id) && !colorsById.ContainsKey(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (invalidSea.Length > 0)
         {
             throw new InvalidDataException(

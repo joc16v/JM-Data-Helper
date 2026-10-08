@@ -1,4 +1,4 @@
-JM DATA HELPER 0.2.1 – WINDOWS x64
+JM DATA HELPER 0.2.2 – WINDOWS x64
 
 KOJU VARIJANTU ODABRATI?
 framework-dependent: mali paket; treba instalirani .NET 10 Desktop Runtime x64
@@ -15,6 +15,8 @@ POKRETANJE
    Dvoklik na tray ikonu ponovno otvara prozor.
    Za potpuno gašenje: desni klik na tray ikonu > Izlaz.
 6. Ponovno pokretanje EXE-a otvara postojeću instancu.
+7. Odaberi Danas/Sutra/Prekosutra i klikni Otvori DHMZ JSON za prikaz podataka.
+   Test DHMZ koristi isti odabrani dan. Provjeri API otvara samo health status.
 
 VAŽNO
 Helper radi na računalu na kojem radi browser s Pilot Edgeom.
