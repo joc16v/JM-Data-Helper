@@ -1,0 +1,45 @@
+JM DATA HELPER 0.2.2 – WINDOWS x64
+
+KOJU VARIJANTU ODABRATI?
+framework-dependent: mali paket; treba instalirani .NET 10 Desktop Runtime x64
+                    I ASP.NET Core Runtime 10 x64.
+self-contained: uključuje potrebne runtimeove; dodatna .NET instalacija nije potrebna.
+Obje varijante imaju istu funkcionalnost. Nemoj pokretati obje istovremeno.
+
+POKRETANJE
+1. Ugasi staru verziju prije zamjene (inače koristi isti port 8765).
+2. Raspakiraj cijeli ZIP u jedan folder (EXE i config.json zajedno).
+3. Pokreni JMDataHelper.exe.
+4. Otvori Pilot Edge i klikni UČITAJ DHMZ u Meteoalarm templateu.
+5. X i minimiziranje skrivaju prozor; program nastavlja raditi u trayu.
+   Dvoklik na tray ikonu ponovno otvara prozor.
+   Za potpuno gašenje: desni klik na tray ikonu > Izlaz.
+6. Ponovno pokretanje EXE-a otvara postojeću instancu.
+7. Odaberi Danas/Sutra/Prekosutra i klikni Otvori DHMZ JSON za prikaz podataka.
+   Test DHMZ koristi isti odabrani dan. Provjeri API otvara samo health status.
+
+VAŽNO
+Helper radi na računalu na kojem radi browser s Pilot Edgeom.
+Zajednička office mreža ne mijenja to pravilo: 127.0.0.1 označava taj PC.
+Za Remote Desktop/Citrix helper treba biti u istoj udaljenoj sesiji kao browser.
+Bez helpera Pilot template i dalje dopušta ručni unos boja i tekstova.
+Neuspješan dohvat ne zamjenjuje postojeće boje u našem Pilot templateu.
+
+KONFIGURACIJA
+config.json: port, allowedOrigins, requestTimeoutSeconds, cacheSeconds.
+Promjene vrijede nakon ponovnog pokretanja helpera.
+Zadano: http://127.0.0.1:8765; dopušten Pilot origin http://viz-plt-mos-gwy:8177.
+Ako mijenjaš port, treba promijeniti i helperUrl u Pilot config.js.
+
+DIJAGNOSTIKA
+API: http://127.0.0.1:8765/api/health
+Izvori/status: http://127.0.0.1:8765/api/sources
+Prozor prikazuje i pozive iz Pilota, zadnji uspješan dohvat i zadnju grešku.
+Logovi: %LOCALAPPDATA%\JMDataHelper\logs (gumb Otvori logove).
+Čuvaju se zadnjih 14 kalendarskih dana; najviše 2 datoteke po danu do 2 MB.
+Ukupni maksimum 56 MB; u normalnom radu bitno manje.
+Čišćenje radi pri pokretanju i prvom zapisu svakog novog dana, bez restarta.
+API radi ne znači da je internet ili DHMZ trenutno dostupan.
+Po potrebi browser traži dopuštenje za pristup lokalnoj mreži.
+
+.NET runtime download: https://dotnet.microsoft.com/en-us/download/dotnet/10.0

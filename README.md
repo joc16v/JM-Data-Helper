@@ -1,92 +1,76 @@
-# JM Data Helper
+# JM Data Helper v0.2.2
 
-Mali lokalni Windows helper za Viz Pilot Edge. Pilot Edge ostaje na centralnom PDS-u, a JavaScript u browseru dohvaća podatke s helpera na istom računalu (`127.0.0.1`).
+Lokalni Windows helper za Viz Pilot Edge. Template može ostati na centralnom PDS-u, ali helper mora raditi na računalu na kojem je otvoren browser s Pilot Edgeom. Sama zajednička uredska mreža nije dovoljna: `127.0.0.1` uvijek znači to računalo.
 
-## v0.1
+## Instalacija
 
-- .NET 8 WinForms aplikacija
-- lokalni Kestrel API na `http://127.0.0.1:8765`
-- CORS dopušten za `http://viz-plt-mos-gwy:8177`
-- Private Network Access preflight header
-- `GET /api/health`
-- `GET /api/dhmz/warnings?day=0|1|2`
-- DHMZ scraper čita finalnu boju 21 županije + 6 morskih područja iz SVG karte
-- 45 s cache
-- jednostavan Test DHMZ gumb
-- bez Playwrighta, browser automationa i dodatnih NuGet paketa
+Raspakiraj ZIP i pokreni `JMDataHelper.exe`. Uz EXE ostavi `config.json`. Potpune upute su u [INSTALL.txt](INSTALL.txt).
 
-## JSON leveli
+- **framework-dependent**: mali paket; treba **.NET 10 Desktop Runtime x64** i **ASP.NET Core Runtime 10 x64**. SDK nije potreban.
+- **self-contained**: uključuje runtimeove; radi bez njihove prethodne instalacije.
 
-- `1` green
-- `2` yellow
-- `3` orange
-- `4` red
-- `0` je rezervirano za ručno "bez boje" u Viz/Pilot workflowu
+Runtimeovi: https://dotnet.microsoft.com/en-us/download/dotnet/10.0
 
-## Pokretanje iz sourcea
+Prije zamjene izađi iz stare verzije. X i minimiziranje skrivaju prozor u tray dok helper nastavlja raditi. Za potpuno zatvaranje koristi **Izlaz** u tray izborniku. Ponovno pokretanje otvara postojeći prozor umjesto druge instance.
 
-Na Windows računalu s .NET 8 SDK:
+Pilot Edge mora ostati upotrebljiv ručno kada helper nije pokrenut ili izvor nije dostupan. Helper ne upisuje podatke u Viz: template odlučuje kada primijeniti valjan odgovor.
+
+## Što je novo
+
+- .NET 10, tray i jedna instanca po Windows korisniku.
+- Status izvora i zadnje uspješno dohvaćanje ažuriraju se i pri zahtjevima iz Pilota.
+- Vlastita JM ikona sa zupčanikom u EXE-u, prozoru i trayu.
+- Dnevni logovi u `%LOCALAPPDATA%\JMDataHelper\logs`: zadnjih 14 kalendarskih dana, do dvije datoteke po danu, svaka najviše 2 MB (ukupno do 56 MB). Čišćenje pri pokretanju i prvom zapisu svakog novog dana. Preveliki pojedinačni zapisi skraćuju se.
+- Podesivi port, dopušteni browser origin, timeout i cache.
+- Odvojeni DHMZ parser i servis, zajednički registar statusa za buduće izvore.
+- Stroga provjera svih 21 županije; nedostajuća županija je greška. Odgovor uvijek sadrži i svih 6 poznatih morskih područja.
+- Cache po danu ne vrijedi nakon promjene datuma u Zagrebu; istodobni zahtjevi dijele dohvat.
+- Automatske provjere i izrada obaju paketa u GitHub Actions.
+
+## Postavke
+
+Uredi `config.json` i ponovno pokreni helper. Zadane vrijednosti:
+
+```json
+{
+  "port": 8765,
+  "allowedOrigins": ["http://viz-plt-mos-gwy:8177"],
+  "requestTimeoutSeconds": 15,
+  "cacheSeconds": 45
+}
+```
+
+Helper sluša samo na `127.0.0.1`. Origin sadrži točan protokol, hostname i port Pilota, bez putanje i završnog `/`. Promjena porta traži istu promjenu u konfiguraciji Pilot templatea. Za drugi skup postavki može se pokrenuti `JMDataHelper.exe --config "C:\putanja\config.json"`.
+
+CORS i Private Network Access preflight dopušteni su samo navedenim originima. Ako browser traži dozvolu za lokalnu mrežu, treba je omogućiti za Pilot stranicu.
+
+## API i kompatibilnost
+
+- `GET /api/health`: dostupnost lokalnog API-ja, verzija i vrijeme.
+- `GET /api/sources`: stanje izvora, zadnji pokušaj, uspjeh i pogreška.
+- `GET /api/dhmz/warnings?day=0|1|2`: danas, sutra, prekosutra.
+- Dodaj `&refresh=true` za ponovno dohvaćanje.
+
+Warning odgovor ostaje kompatibilan: `ok`, `day`, `sourceUrl`, `fetchedAt`, `counties`, `sea`. Svaka regija ima `id`, `name`, `color`, `level`. `fetchedAt` je vrijeme uspješnog dohvaćanja, a ne objave DHMZ-a. Leveli: **0 none, 1 green, 2 yellow, 3 orange, 4 red**.
+
+DHMZ može izostaviti morska područja bez upozorenja ili poslati njihov pointer samo s osnovnom klasom `fd-c-map__regija-v2`, bez klase boje. U oba slučaja poznato morsko područje vraća se kao `color: "none", level: 0`. Pronađene boje ostaju nepromijenjene. Ovo pravilo vrijedi samo za more: svih 21 županija i dalje mora biti prisutno s valjanom bojom, a eksplicitna neprepoznata klasa boje mora i dalje je greška.
+
+Gumb **Otvori DHMZ JSON** otvara warning endpoint za odabrani dan (Danas/Sutra/Prekosutra) uz osvježavanje podataka. Isti odabir dana koristi i **Test DHMZ**. **Provjeri API** zasebno otvara `/api/health`.
+
+Nevaljan dan daje HTTP 400. Nedostupan izvor ili promijenjena/nepotpuna HTML struktura daje HTTP 502 s `ok:false` i `error`. Ne vraćaju se stari podaci kao da su novi. Status pamti zadnji uspjeh, a template treba sačuvati postojeće/ručne vrijednosti kad dohvat ne uspije.
+
+DHMZ izvor: `https://meteo.hr/naslovnica-upozorenja-zupanije.php?tab=upozorenja&dan=N`. Parser čita `*_pointer` elemente i klase `fd-c-map__regija--green/yellow/orange/red`. Ne trebaju browser automation ni dodatni NuGet paketi.
+
+## Razvoj, provjere i pakiranje
+
+Windows i .NET 10 SDK:
 
 ```powershell
-dotnet run
+ dotnet run
+ dotnet run --project tests/Helper.Tests -c Release
+ .\publish.ps1
 ```
 
-## Single-file EXE
+ZIP-ovi nastaju u `artifacts/`. Provjere koriste snimljene DHMZ pointere i kontrolirani HTTP servis: svih 27 regija, boje, nepotpun HTML, cache, ponoć u Zagrebu, paralelno osvježavanje, HTTP grešku, otkazivanje i oporavak. Ne ovise o dostupnosti DHMZ-a.
 
-```powershell
-dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
-```
-
-EXE će biti u `publish\JMDataHelper.exe`.
-
-## Pilot Edge test
-
-U Template Builder skriptu privremeno dodaj:
-
-```ts
-vizrt.onClick = async (name: string) => {
-    if (name !== "testHelper") return;
-
-    try {
-        const r = await fetch("http://127.0.0.1:8765/api/dhmz/warnings?day=1", {
-            cache: "no-store"
-        });
-
-        const data = await r.json();
-        console.log("JM DATA HELPER:", data);
-
-        if (!r.ok || !data.ok) {
-            throw new Error(data.error || `HTTP ${r.status}`);
-        }
-
-        app.notify("success", `Helper radi - ${data.counties.length} županija`);
-    }
-    catch (e) {
-        console.error(e);
-        app.notify("error", "JM Data Helper nije dostupan");
-    }
-};
-```
-
-HTML:
-
-```html
-<button vizrt-click-name="testHelper">TEST HELPER</button>
-```
-
-Ako Chromium prijavi Local Network Access / Private Network Access blokadu unatoč CORS-u, prvo provjeriti browser permission za lokalnu mrežu. Helper već vraća `Access-Control-Allow-Private-Network: true` na PNA preflight.
-
-## DHMZ source
-
-Helper trenutno dohvaća:
-
-`https://meteo.hr/naslovnica-upozorenja-zupanije.php?tab=upozorenja&dan=N`
-
-Iz HTML-a čita samo elemente `*_pointer` i finalne klase:
-
-- `fd-c-map__regija--green`
-- `fd-c-map__regija--yellow`
-- `fd-c-map__regija--orange`
-- `fd-c-map__regija--red`
-
-Ako DHMZ promijeni strukturu stranice, endpoint namjerno vraća grešku umjesto pogrešnih/zelenih podataka.
+Za novi izvor dodaj zaseban parser u `Sources/<Izvor>` i servis, registriraj ih u `Program.cs` te dodaj zaseban `/api/<izvor>/...` endpoint. Za zajednički prikaz statusa koristi `SourceRegistry`. Novi izvor ne mijenja postojeći DHMZ JSON ugovor. Dodaj snimljeni ulaz i provjere prije korištenja u produkciji.
