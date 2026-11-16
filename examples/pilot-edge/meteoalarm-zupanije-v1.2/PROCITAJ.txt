@@ -1,0 +1,30 @@
+METEOALARM – VIZ PILOT EDGE CUSTOM HTML
+
+1. Kopiraj CIJELI sadržaj ovog paketa u folder na Pilot Data Serveru u kojem
+   inače držiš svoje HTML templatee (npr. app/mytemplates/meteo-zupanije/).
+2. U Template Builderu osvježi/importiraj fieldove nove Artist scene.
+   Potrebni su 501–521, more 040–045, naslov, podnaslov, IZVOR, TXT-SJEVER
+   i postojeći fieldovi ikona 0200–0215, 0300–0315, 0400–0415.
+   ID-jeve s nulama čuvaj kao stringove (040 nije isto što i 0400).
+3. Postavi Custom HTML URL (prilagodi putanju svojem folderu):
+   http://viz-plt-mos-gwy:8177/app/mytemplates/meteo-zupanije/meteo_zupanije.html
+4. Otvori novi data element u Pilot Edgeu. Poruka treba biti Pilot povezan.
+5. Pokreni JM Data Helper na istom PC-u. Odaberi dan i klikni UČITAJ DHMZ.
+
+DHMZ: učitava 21 županiju; Učitaj i more dodatno učitava šest postojećih morskih područja.
+Ako dohvat ne uspije, zadržava postojeće vrijednosti. Sve boje možeš mijenjati ručno.
+0=bez boje, 1=zelena, 2=žuta, 3=narančasta, 4=crvena.
+Naslov, podnaslov, izvor i tekst prognoze uređuju se ručno.
+Ikone ostaju na postojećim pozicijama: 020x prikaz On/Off, 040x simbol 0–7, 030x boja.
+Novo učitavanje DHMZ-a zamjenjuje prethodne ručne boje županija (i mora ako je uključeno).
+Promjena dana sama ne mijenja podatke; treba ponovno kliknuti UČITAJ DHMZ.
+Helper nije potreban za ručni unos.
+
+Nedostajući fieldovi vidljivo su označeni; dohvat županija blokiran je ako 501–521 nisu svi dostupni.
+Učitavanje ne mijenja tekstove ni ikone. Stare kopnene kontrole 031–039 nisu povezane.
+Stare kontrole 0300–0315 zadržane su jer ih postojeći HTML koristi za boju ikona.
+Nemoj ih brisati bez provjere u sceni. 046 nije morski field u potvrđenom popisu.
+
+config.js sadrži sve mappinge; payloadhosting.js iz originalnog ZIP-a ostao je neizmijenjen.
+Paket se ne povezuje s Pilotom kad se otvori izravno kao lokalni HTML: treba biti unutar hosta.
+Vizrt upute: https://documentation.vizrt.com/template-builder-guide/3.6/Quick_Start_Code_Samples.html
