@@ -292,3 +292,276 @@ Prije mergea novog izvora provjeri:
 - self-contained build se može pokrenuti na čistom Windows računalu.
 
 Ovaj pristup omogućuje da se isti Helper postupno proširi na meteo, sportske i druge podatkovne izvore bez kopiranja mrežne logike i API ključeva u svaki pojedini Viz/Pilot template.
+
+---
+
+## AI / worker handoff — pročitaj prije izmjena
+
+Ovaj odjeljak postoji zato da drugi AI/worker može nastaviti razvoj bez ponovnog rekonstruiranja konteksta projekta.
+
+### Trenutna produkcijska baza
+
+- Repository: `joc16v/JM-Data-Helper`
+- Glavna razvojna baza: **`main`**
+- Trenutna verzija: **0.2.2**
+- Platforma: **Windows x64, .NET 10, WinForms + lokalni ASP.NET Core API**
+- Zadani lokalni API: **`http://127.0.0.1:8765`**
+- Helper mora raditi na **istom Windows računalu / istoj korisničkoj sesiji** kao browser koji prikazuje Viz Pilot Edge.
+- `127.0.0.1` se namjerno koristi; Helper trenutno nije zamišljen kao centralni mrežni servis.
+
+Prije početka rada uvijek napravi:
+
+```powershell
+git fetch origin
+git switch main
+git pull --ff-only origin main
+git status
+```
+
+Ne polazi od stare feature grane samo zato što izgleda novije. `main` treba biti izvor istine nakon mergeanih PR-ova.
+
+### Što je projekt
+
+JM Data Helper je lokalni **data gateway / adapter** između Viz Pilot HTML templatea i vanjskih izvora podataka.
+
+Željeni smjer nije:
+
+```text
+Pilot template -> direktno svaki vanjski API
+```
+
+nego:
+
+```text
+Viz Pilot HTML
+      |
+      v
+JM Data Helper
+      |
+      +---- DHMZ
+      +---- Weather provider
+      +---- drugi budući izvori
+```
+
+Helper rješava:
+
+- dohvat vanjskih podataka,
+- API ključeve i tajne,
+- timeout i error handling,
+- normalizaciju podataka,
+- cache,
+- status izvora,
+- stabilan lokalni JSON ugovor prema Pilot templateima.
+
+Pilot template treba ostati što jednostavniji: pozvati lokalni endpoint, provjeriti odgovor i upisati podatke u Viz payload.
+
+### Funkcionalnosti koje se NE SMIJU slučajno razbiti
+
+Kod svake izmjene zadrži sljedeće ponašanje osim ako zadatak izričito traži drugačije:
+
+1. `GET /api/health` mora ostati dostupan.
+2. `GET /api/sources` mora ostati dostupan.
+3. `GET /api/dhmz/warnings?day=0|1|2` mora zadržati postojeći JSON ugovor.
+4. DHMZ parser mora i dalje strogo validirati svih 21 županiju.
+5. Poznatih 6 morskih područja i dalje mora biti prisutno u izlazu.
+6. Neuspješan vanjski dohvat ne smije se predstavljati kao valjani novi podatak.
+7. Pilot template mora moći ostati upotrebljiv ručno ako Helper ili vanjski izvor ne radi.
+8. X/minimize skrivaju Helper u tray; potpuno gašenje je preko **Izlaz**.
+9. Mora ostati jedna instanca Helpera po Windows korisniku.
+10. Port i dopušteni origin moraju ostati konfigurabilni.
+11. Produkcijski API ključ ili druga tajna ne smije završiti u GitHub repozitoriju ni u Pilot HTML-u.
+
+### Kako pristupiti novom zadatku
+
+Prije kodiranja:
+
+1. pročitaj ovaj README,
+2. pregledaj postojeću strukturu `Sources/`, `Services/`, `Infrastructure/`, `Program.cs` i testove,
+3. identificiraj koristi li novi podatak postojeći upstream izvor ili treba novi source,
+4. definiraj **naš izlazni JSON ugovor prije implementacije**,
+5. provjeri može li više templatea dijeliti isti upstream dohvat/cache,
+6. tek onda mijenjaj kod.
+
+Ne stavljaj veliki parser, mapping ili business logiku direktno u `Program.cs`.
+
+### Pravilo za nove providere
+
+Za novi provider preferiraj:
+
+```text
+Sources/<Provider>/
+    modeli / parser / mapper
+
+Services/
+    servis za HTTP dohvat, cache i SourceRegistry
+
+Program.cs
+    DI registracija + tanki endpointi
+```
+
+Ako pet templatea koristi isti provider, cilj je **jedan provider client + zajednički cache**, a ne pet zasebnih HTTP implementacija.
+
+Primjer:
+
+```text
+Weather provider
+       |
+       v
+jedan upstream response/cache
+       |
+       +--> /api/weather/current
+       +--> /api/weather/forecast
+       +--> /api/weather/wind
+       +--> /api/weather/temperatures
+```
+
+### API key / credentials
+
+Ako korisnik dostavi page koji trenutno u JavaScriptu ima API key:
+
+- nemoj trajno zadržati ključ u HTML-u,
+- nemoj ga commitati,
+- premjesti pristup provideru u Helper,
+- konfiguraciju napravi tako da se stvarni ključ može postaviti lokalno ili environment varijablom,
+- u repou smije ostati samo primjer/naziv konfiguracijske stavke.
+
+Ako nije jasno smije li se određeni credential commitati, tretiraj ga kao tajnu.
+
+### JSON ugovori prema Pilot templateima
+
+Preferiraj male, stabilne i čitljive DTO-e. Vanjski provider format ne smije biti javni ugovor Helpera.
+
+Loše:
+
+```text
+Pilot ovisi o providerovim temp_c, forecast.forecastday[0]... itd.
+```
+
+Dobro:
+
+```json
+{
+  "ok": true,
+  "location": "Zagreb",
+  "temperature": 9.4,
+  "humidity": 81,
+  "wind": {
+    "speed": 12,
+    "direction": "NE"
+  },
+  "condition": "cloudy",
+  "fetchedAt": "..."
+}
+```
+
+Time se provider kasnije može promijeniti bez prerade svih Viz templatea.
+
+### Cache strategija
+
+Nemoj automatski koristiti jedan globalni TTL za sve podatke.
+
+Prvo odredi prirodu podatka:
+
+- observation/current: kratki cache,
+- hourly: srednji cache,
+- daily: dulji cache,
+- warnings: dovoljno često da bude aktualno, ali bez nepotrebnog bombardiranja izvora.
+
+Ako više endpointova proizlazi iz istog upstream JSON-a, fetchaj ga jednom i dijeli cache.
+
+### Error handling i fallback
+
+Za novi endpoint zadrži konzistentan princip:
+
+- neispravni argumenti -> 400,
+- vanjski HTTP/parser/timeout problem -> 502,
+- odgovor s greškom -> `ok:false`,
+- ne vraćati nepotpun response kao uspjeh,
+- Pilot ne smije automatski obrisati postojeće ručne vrijednosti zbog greške.
+
+Ako se uvede stale-cache fallback, mora biti jasno označen u responseu, npr. `stale:true`, zajedno sa starošću podatka.
+
+### SourceRegistry
+
+Svaki stvarni vanjski izvor treba integrirati u zajednički statusni sustav tako da se iz `/api/sources` može vidjeti:
+
+- zadnji pokušaj,
+- zadnji uspjeh,
+- zadnja greška,
+- po mogućnosti stanje/starost cachea.
+
+Kod dijagnostike prvo treba biti moguće odgovoriti na pitanje: **je li problem u lokalnom Helperu, mreži, provideru ili Pilot templateu?**
+
+### Testovi su dio implementacije
+
+Novi source nije završen samo zato što radi na jednom live requestu.
+
+Dodaj fixture/testove za barem:
+
+- valjani response,
+- nepotpun response,
+- nepoznatu vrijednost,
+- HTTP grešku,
+- timeout/cancellation,
+- cache,
+- paralelne requestove,
+- oporavak nakon greške,
+- stabilnost lokalnog JSON ugovora.
+
+Testovi ne smiju zahtijevati da live provider bude dostupan.
+
+### Git workflow za AI workera
+
+Za stvarnu novu funkcionalnost napravi novu granu iz aktualnog `main`:
+
+```powershell
+git switch main
+git pull --ff-only origin main
+git switch -c feature/<kratak-opis>
+```
+
+Ne mergeaj samovoljno u `main` ako korisnik nije tražio merge.
+
+Na kraju rada worker treba jasno prijaviti:
+
+- naziv grane,
+- commit SHA,
+- što je promijenjeno,
+- koje endpointove je dodao/promijenio,
+- kako je testirao,
+- ima li migration/config koraka,
+- ima li nešto što korisnik još mora ručno postaviti.
+
+### Versioning / publish
+
+Ako se radi nova korisnička/produkcijska verzija, provjeri da su usklađeni:
+
+- `Program.Version`,
+- `JMDataHelper.csproj`,
+- default verzija u `publish.ps1`,
+- README naslov / release napomena ako je relevantno.
+
+Za paket:
+
+```powershell
+.\publish.ps1
+```
+
+Produkcijski preferirani paket kada ne želimo instalirati runtime na ciljnom PC-u je **self-contained win-x64**.
+
+### Trenutni smjer daljnjeg razvoja
+
+Sljedeći logičan korak projekta je proširiti Helper iz DHMZ-only alata u zajednički meteo data gateway.
+
+Postoji drugi set od približno pet meteoroloških Viz/Pilot templatea koji koristi druge podatke/provider API. Kada ti templatei/pageovi budu dostupni:
+
+1. prvo pregledaj svih pet zajedno,
+2. identificiraj provider(e), zajedničke requestove i fieldove,
+3. ne kopiraj njihov postojeći fetch kod direktno u svaki template,
+4. predloži zajednički model i skup Helper endpointova,
+5. API ključeve prebaci u Helper,
+6. uvedi zajednički cache gdje ima smisla,
+7. zadrži postojeći DHMZ/Meteoalarm endpoint potpuno kompatibilnim.
+
+Cilj je da se nakon toga novi meteo template najčešće dodaje tako da koristi već postojeći Helper endpoint ili se u Helper dodaje mali novi adapter, a ne nova paralelna infrastruktura.
+
