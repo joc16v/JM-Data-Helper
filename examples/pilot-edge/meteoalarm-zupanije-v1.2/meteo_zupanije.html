@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="hr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meteoalarm · županije</title>
+  <link rel="stylesheet" href="meteo.css?v=1.2">
+  <script src="payloadhosting.js" defer></script>
+  <script src="config.js?v=1.2" defer></script>
+  <script src="meteo.js?v=1.2" defer></script>
+</head>
+<body>
+  <main>
+    <header><div><h1>Meteoalarm</h1><p>Županije · more · ikone</p></div><span id="connection" class="badge">Čekam Pilot</span></header>
+    <section class="load-panel" aria-label="Učitavanje DHMZ upozorenja">
+      <div class="load-controls"><label for="day">Upozorenja za</label><select id="day"><option value="0">Danas</option><option value="1">Sutra</option><option value="2">Prekosutra</option></select><button id="load" class="primary" disabled>UČITAJ DHMZ</button><label class="check"><input type="checkbox" id="include-sea"> Učitaj i more</label></div>
+      <p id="status" role="status" aria-live="polite">Pokreni JM Data Helper na ovom računalu. Nakon učitavanja boje možeš ručno mijenjati.</p>
+      <p id="binding-warning" class="warning" hidden></p>
+    </section>
+    <fieldset id="fields" disabled>
+      <section class="panel">
+        <div class="text-grid"><label>Naslov<input data-field="naslov" type="text" autocomplete="off"></label><label>Podnaslov<input data-field="podnaslov" type="text" autocomplete="off"></label><label>Izvor<input data-field="IZVOR" type="text" autocomplete="off"></label></div>
+        <label class="forecast">Tekst prognoze<textarea data-field="TXT-SJEVER" rows="2"></textarea></label>
+      </section>
+      <section class="panel"><div class="section-heading"><h2>Županije</h2><span>0 = bez boje · 1 zelena · 2 žuta · 3 narančasta · 4 crvena</span></div><div id="counties" class="county-grid"></div></section>
+      <section class="panel"><div class="section-heading"><h2>More</h2><span>Ručno, osim kad uključiš „Učitaj i more”</span></div><div id="sea" class="sea-grid"></div></section>
+      <details class="panel"><summary>Ikone upozorenja <span>postojeće pozicije · ručni unos</span></summary><p class="help">Svaka pozicija ima dvije ikone. Odaberi prikaz, simbol i boju.</p><div id="icons" class="icon-grid"></div><div class="icon-legend" id="icon-legend"></div></details>
+    </fieldset>
+  </main>
+</body>
+</html>
