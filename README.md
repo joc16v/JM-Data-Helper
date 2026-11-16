@@ -295,6 +295,16 @@ Ovaj pristup omogućuje da se isti Helper postupno proširi na meteo, sportske i
 
 ---
 
+## Referentni Pilot Edge template
+
+Konkretni Meteoalarm Pilot Edge v1.2 source nalazi se u:
+
+`examples/pilot-edge/meteoalarm-zupanije-v1.2/`
+
+To je referenca za stvarnu integraciju Helpera s Pilot Edge payloadom: field mapping, `payloadhosting` način rada, validacija odgovora i ponašanje kod greške. Kod budućih izmjena Helpera provjeri kompatibilnost i s tim templateom.
+
+Napomena: razvojni folder u repou sadrži naše custom source datoteke i mapping. Originalni deployment paket dodatno sadrži standardni Vizrt `payloadhosting.js` i assete `1.png`–`7.png`.
+
 ## AI / worker handoff — pročitaj prije izmjena
 
 Ovaj odjeljak postoji zato da drugi AI/worker može nastaviti razvoj bez ponovnog rekonstruiranja konteksta projekta.
