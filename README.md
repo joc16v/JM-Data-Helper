@@ -66,11 +66,229 @@ DHMZ izvor: `https://meteo.hr/naslovnica-upozorenja-zupanije.php?tab=upozorenja&
 Windows i .NET 10 SDK:
 
 ```powershell
- dotnet run
- dotnet run --project tests/Helper.Tests -c Release
- .\publish.ps1
+dotnet run
+dotnet run --project tests/Helper.Tests -c Release
+.\publish.ps1
 ```
 
 ZIP-ovi nastaju u `artifacts/`. Provjere koriste snimljene DHMZ pointere i kontrolirani HTTP servis: svih 27 regija, boje, nepotpun HTML, cache, ponoć u Zagrebu, paralelno osvježavanje, HTTP grešku, otkazivanje i oporavak. Ne ovise o dostupnosti DHMZ-a.
 
-Za novi izvor dodaj zaseban parser u `Sources/<Izvor>` i servis, registriraj ih u `Program.cs` te dodaj zaseban `/api/<izvor>/...` endpoint. Za zajednički prikaz statusa koristi `SourceRegistry`. Novi izvor ne mijenja postojeći DHMZ JSON ugovor. Dodaj snimljeni ulaz i provjere prije korištenja u produkciji.
+## Kako nastaviti razvoj i dodavati nove izvore
+
+Cilj je da JM Data Helper ostane **jedan lokalni data gateway za više Viz/Pilot templatea**, a ne da svaki template direktno razgovara s vanjskim API-jem. Template treba poznavati samo lokalni Helper endpoint i stabilan JSON ugovor.
+
+### 1. Jedan izvor = zaseban modul
+
+Za svaki novi vanjski izvor napravi zaseban folder:
+
+```text
+Sources/
+  Dhmz/
+  NoviIzvor/
+    NoviIzvorParser.cs
+    NoviIzvorModels.cs
+```
+
+Ako izvor vraća JSON i ne treba poseban parser, parser može biti vrlo tanak, ali mapiranje vanjskog formata u naš interni format i dalje treba ostati izvan `Program.cs`.
+
+Servis za dohvat i cache drži u `Services/`, npr.:
+
+```text
+Services/
+  DhmzService.cs
+  WeatherService.cs
+```
+
+`Program.cs` treba ostati prvenstveno mjesto za registraciju dependencyja i definiranje HTTP endpointova, a ne mjesto za veliku količinu parsiranja i poslovne logike.
+
+### 2. Registracija novog izvora
+
+Novi servis registriraj u DI containeru u `Program.cs`:
+
+```csharp
+builder.Services.AddSingleton<WeatherService>();
+```
+
+Zatim dodaj zaseban endpoint, npr.:
+
+```text
+/api/weather/current
+/api/weather/forecast
+/api/weather/wind
+```
+
+Koristi pravilo:
+
+```text
+/api/<izvor-ili-domena>/<funkcija>
+```
+
+Ne mijenjaj postojeći `/api/dhmz/warnings` ugovor zbog novog izvora.
+
+### 3. Vanjski API format ne smije curiti u template
+
+Ako provider vraća npr. `temp_c`, `wind_kph` ili duboko ugniježđeni JSON, Helper to treba prevesti u naš stabilan format.
+
+Primjer:
+
+```json
+{
+  "ok": true,
+  "location": "Zagreb",
+  "temperature": 9.4,
+  "humidity": 81,
+  "wind": {
+    "speed": 12,
+    "direction": "NE"
+  },
+  "condition": "cloudy",
+  "fetchedAt": "2026-11-16T15:00:00+01:00"
+}
+```
+
+Ako se jednog dana promijeni provider, Pilot/Viz template ne bi trebao trebati izmjenu ako se naš JSON ugovor može zadržati.
+
+### 4. API ključevi i tajne
+
+API ključ **ne stavljati u Pilot HTML/JavaScript** i ne commitati stvarni ključ u GitHub.
+
+Ako novi provider traži ključ, Helper treba biti jedino mjesto koje ga koristi. Za razvoj predvidi konfiguraciju preko `config.json`, zasebne lokalne konfiguracije ili environment varijable. U repo commitati samo primjer/naziv postavke, nikad stvarni produkcijski ključ.
+
+Ako se dodaju tajne u `config.json`, production config treba ostati lokalno i ne smije završiti u repozitoriju.
+
+### 5. Cache i broj poziva prema provideru
+
+Prije svakog novog endpointa odluči koliko dugo podatak smije biti star. Ne dohvaćati isti podatak ponovno za svaki preview refresh ako to nije potrebno.
+
+Tipični početni intervali:
+
+```text
+current / observations   1–5 min
+hourly forecast          5–10 min
+daily forecast           15–30 min
+warnings                 5–10 min
+```
+
+To su početne vrijednosti, ne obavezna pravila. Za svaki izvor ih prilagodi stvarnoj dinamici podataka i ograničenjima providera.
+
+Ako više endpointova koristi isti upstream response, poželjno je dohvatiti ga jednom i iz cachea izvesti više naših pogleda umjesto raditi više vanjskih requestova.
+
+### 6. SourceRegistry i dijagnostika
+
+Svaki vanjski izvor treba biti vidljiv u `/api/sources`.
+
+Bilježi barem:
+
+- zadnji pokušaj dohvaćanja,
+- zadnji uspjeh,
+- zadnju grešku,
+- po mogućnosti vrijeme podatka ili starost cachea.
+
+Helper UI i `/api/sources` trebaju omogućiti da se brzo razlikuje problem u Helperu od problema na vanjskom API-ju.
+
+### 7. Error handling
+
+Endpoint ne smije vratiti neispravan ili nepotpun podatak kao da je valjan.
+
+Preporučeni princip:
+
+- neispravan query → HTTP 400,
+- provider/network/parser problem → HTTP 502,
+- odgovor s greškom → `ok:false` i smislen `error`,
+- template treba zadržati postojeće/ručne vrijednosti ako nema valjanog novog odgovora.
+
+Ako se kasnije uvede vraćanje stale cachea, to mora biti eksplicitno označeno, npr. `stale:true` i starost podatka.
+
+### 8. Testovi prije produkcije
+
+Za svaki novi izvor dodaj testove u `tests/Helper.Tests`.
+
+Minimalno provjeri:
+
+- normalan valjani response,
+- nedostajuća obavezna polja,
+- nepoznate vrijednosti,
+- HTTP grešku,
+- timeout/otkazivanje,
+- cache,
+- paralelne zahtjeve prema istom podatku,
+- oporavak nakon greške,
+- stabilnost našeg izlaznog JSON ugovora.
+
+Testovi ne bi trebali ovisiti o živom vanjskom API-ju. Spremi reprezentativni response/fixture i koristi kontrolirani HTTP servis, kao kod DHMZ testova.
+
+### 9. Pravilo kompatibilnosti
+
+Postojeći produkcijski endpoint ne mijenjati na način koji može razbiti postojeći template.
+
+Sigurno je:
+
+- dodati novo polje u odgovor ako ga stari template ignorira,
+- dodati novi endpoint,
+- dodati novi izvor.
+
+Rizično je:
+
+- preimenovati postojeće polje,
+- promijeniti tip podatka,
+- promijeniti značenje vrijednosti,
+- ukloniti polje koje template koristi.
+
+Ako je breaking change stvarno potreban, napravi novi endpoint ili verziju ugovora umjesto tihog mijenjanja starog.
+
+### 10. Branch i PR workflow
+
+Za novu funkcionalnost ne raditi direktno na `main`.
+
+Primjer:
+
+```powershell
+git switch main
+git pull --ff-only origin main
+git switch -c feature/weather-api
+```
+
+Nakon razvoja i testova:
+
+```powershell
+dotnet run --project tests/Helper.Tests -c Release
+git status
+git add .
+git commit -m "Add weather data source"
+git push -u origin feature/weather-api
+```
+
+Otvori PR prema `main`, provjeri diff i testove, tek onda merge.
+
+`main` treba uvijek predstavljati zadnju kompletnu verziju iz koje se može napraviti produkcijski build.
+
+### 11. Verzija i publish
+
+Kod nove produkcijske verzije uskladi broj verzije u projektu i aplikaciji te po potrebi default vrijednost u `publish.ps1`.
+
+Build/pakiranje:
+
+```powershell
+.\publish.ps1
+```
+
+Provjeri oba paketa u `artifacts/`, ali je za računala na kojima ne želimo održavati runtime najjednostavniji **self-contained win-x64** paket.
+
+Prije zamjene produkcijskog Helpera potpuno ugasi staru instancu preko tray izbornika **Izlaz**, jer X samo skriva prozor i stara instanca može i dalje držati port 8765.
+
+### 12. Kratki checklist prije mergea
+
+Prije mergea novog izvora provjeri:
+
+- postojeći DHMZ endpoint i dalje radi,
+- `/api/health` radi,
+- `/api/sources` prikazuje novi izvor,
+- novi endpoint vraća stabilan i razumljiv JSON,
+- nema API ključeva u repou ili Pilot HTML-u,
+- cache ne radi nepotrebne vanjske pozive,
+- greške ne prepisuju valjane vrijednosti u templateu,
+- testovi prolaze,
+- `publish.ps1` uspješno radi,
+- self-contained build se može pokrenuti na čistom Windows računalu.
+
+Ovaj pristup omogućuje da se isti Helper postupno proširi na meteo, sportske i druge podatkovne izvore bez kopiranja mrežne logike i API ključeva u svaki pojedini Viz/Pilot template.
